@@ -1,7 +1,7 @@
 import fsspec
 import argparse
 
-def crawl_repo_files(github_path, exclude_exts=None):
+def crawl_repo_files(github_path, exclude_exts=None, token=None):
     """
     Recursively crawls a GitHub repository using fsspec's githubfs, printing each file's content 
     with a header and numbered lines.
@@ -11,12 +11,16 @@ def crawl_repo_files(github_path, exclude_exts=None):
 
     :param github_path: The GitHub repository path.
     :param exclude_exts: A list of file extensions to exclude (e.g., ['svg']).
+    :param token: Optional GitHub token for accessing private repositories.
     """
     if not github_path.startswith("github://"):
         raise ValueError("Only GitHub paths (starting with 'github://') are supported.")
 
-    # Initialize GitHub filesystem using fsspec
-    fs = fsspec.filesystem("github")
+    # Initialize GitHub filesystem using fsspec (pass token if provided)
+    if token:
+        fs = fsspec.filesystem("github", token=token)
+    else:
+        fs = fsspec.filesystem("github")
     
     # Construct a glob pattern for recursive file search
     pattern = github_path.rstrip('/') + '/**'
@@ -61,9 +65,14 @@ def main():
         default=[],
         help="List of file extensions to exclude (e.g., svg)"
     )
+    parser.add_argument(
+        "--token",
+        help="GitHub token for accessing private repositories",
+        default=None
+    )
     args = parser.parse_args()
     
-    crawl_repo_files(args.github_path, exclude_exts=args.exclude)
+    crawl_repo_files(args.github_path, exclude_exts=args.exclude, token=args.token)
 
 if __name__ == "__main__":
     main()
