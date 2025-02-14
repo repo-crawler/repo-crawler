@@ -43,8 +43,9 @@ class TestCrawl(unittest.TestCase):
     def test_path_transformation(self, mock_filesystem):
         """
         Test that an input in the form "org/name" (without a prefix)
-        is transformed to "github://org/name/main" (default branch 'main')
-        and that the glob pattern is correctly constructed.
+        is transformed properly and that the glob pattern is correctly constructed.
+        Since the GitHub filesystem is initialized with org, repo, and ref,
+        the glob pattern is relative to the repository root.
         """
         fake_fs = FakeFS({})
         mock_filesystem.return_value = fake_fs
@@ -52,8 +53,8 @@ class TestCrawl(unittest.TestCase):
         # Call with an input missing the 'github://' prefix.
         crawl_repo_files("repo-crawler/repo-crawler")
 
-        # Check that the function constructed the correct glob pattern.
-        expected_pattern = "github://repo-crawler/repo-crawler/main/**"
+        # With no subdirectory provided, the glob pattern should be just "**"
+        expected_pattern = "**"
         self.assertEqual(fake_fs.last_glob, expected_pattern)
 
     @patch("repo_crawler.crawl.fsspec.filesystem")
