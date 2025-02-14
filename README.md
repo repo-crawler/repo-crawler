@@ -15,7 +15,7 @@ Repo Crawler is a lightweight, self-contained Python module that recursively cra
 You can install Repo Crawler directly from GitHub using pip:
 
 ```bash
-pip install git+https://github.com/repo-crawler/repo_crawler.git
+pip install git+https://github.com/repo-crawler/repo-crawler.git
 ```
 
 ## Usage
