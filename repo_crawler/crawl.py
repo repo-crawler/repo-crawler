@@ -3,30 +3,43 @@ import argparse
 
 def crawl_repo_files(github_path, exclude_exts=None, token=None):
     """
-    Recursively crawls a GitHub repository using fsspec's githubfs, printing each file's content 
-    with a header and numbered lines.
+    Recursively crawls a GitHub repository using fsspec's GitHubFileSystem,
+    printing each file's content with a header and numbered lines.
 
     The github_path can be provided in one of the following formats:
-      1. github://<user>/<repo>/<branch>[/optional/path]
-      2. <org>/<name>:<branch> or <org>/<name> (branch defaults to "main" if omitted)
+      1. github://<org>/<repo>/<branch>[/optional/path]
+      2. <org>/<repo>:<branch> or <org>/<repo> (branch defaults to "main" if omitted)
 
     :param github_path: The GitHub repository path.
     :param exclude_exts: A list of file extensions to exclude (e.g., ['svg']).
     :param token: Optional GitHub token for accessing private repositories.
     """
-    # Allow input in org/name:branch or org/name format by defaulting to main branch if not provided.
-    if not github_path.startswith("github://"):
+    # Parse the input to extract org, repo, branch (ref), and optional subdirectory.
+    if github_path.startswith("github://"):
+        path_without_prefix = github_path[len("github://"):]
+    else:
+        # Support input like "org/repo:branch" or "org/repo"
         if ':' in github_path:
             repo_part, branch = github_path.split(":", 1)
         else:
             repo_part, branch = github_path, "main"
-        github_path = f"github://{repo_part}/{branch}"
-
-    # Initialize GitHub filesystem using fsspec (pass token if provided)
-    fs = fsspec.filesystem("github", token=token) if token else fsspec.filesystem("github")
+        path_without_prefix = f"{repo_part}/{branch}"
     
-    # Construct a glob pattern for recursive file search
-    pattern = github_path.rstrip('/') + '/**'
+    parts = path_without_prefix.split('/')
+    if len(parts) < 2:
+        raise ValueError("Invalid GitHub path: must include at least org and repo.")
+    org = parts[0]
+    repo = parts[1]
+    ref = parts[2] if len(parts) >= 3 else "main"
+    # Anything after the branch is treated as an optional subdirectory.
+    subdir = '/'.join(parts[3:]) if len(parts) > 3 else ""
+    
+    # Initialize the GitHub filesystem with the required parameters.
+    fs = fsspec.filesystem("github", org=org, repo=repo, ref=ref, token=token)
+    
+    # Construct the glob pattern. Note: The GitHubFileSystem works with paths
+    # relative to the repository root, so we use the subdir if provided.
+    pattern = f"{subdir}/**" if subdir else "**"
     all_paths = fs.glob(pattern, recursive=True)
     
     for path in all_paths:
@@ -36,20 +49,20 @@ def crawl_repo_files(github_path, exclude_exts=None, token=None):
             print(f"Could not get info for {path}: {e}")
             continue
         
-        # Skip if not a file
+        # Skip if not a file.
         if info.get('type') != 'file':
             continue
         
-        # Check file extension against exclusions
+        # Check file extension against exclusions.
         if exclude_exts:
-            parts = path.rsplit('.', 1)
-            if len(parts) == 2 and parts[1] in exclude_exts:
+            parts_split = path.rsplit('.', 1)
+            if len(parts_split) == 2 and parts_split[1] in exclude_exts:
                 continue
         
-        # Print header with file path
+        # Print header with file path.
         print(f'# {path}')
         
-        # Open and print file contents with line numbers
+        # Open and print file contents with line numbers.
         try:
             with fs.open(path, 'r') as f:
                 for i, line in enumerate(f, start=1):
@@ -64,8 +77,8 @@ def main():
     parser.add_argument(
         "github_path",
         help=("The GitHub repository path to crawl. "
-              "Examples: 'org/name:branch' or 'org/name' (defaults to branch 'main') "
-              "or the full 'github://org/name/branch' format.")
+              "Examples: 'org/repo:branch' or 'org/repo' (defaults to branch 'main') "
+              "or the full 'github://org/repo/branch[/optional/path]' format.")
     )
     parser.add_argument(
         "--exclude",
