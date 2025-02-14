@@ -6,21 +6,24 @@ def crawl_repo_files(github_path, exclude_exts=None, token=None):
     Recursively crawls a GitHub repository using fsspec's githubfs, printing each file's content 
     with a header and numbered lines.
 
-    The github_path should be provided in the format:
-        github://<user>/<repo>/<branch>[/optional/path]
+    The github_path can be provided in one of the following formats:
+      1. github://<user>/<repo>/<branch>[/optional/path]
+      2. <org>/<name>:<branch> or <org>/<name> (branch defaults to "main" if omitted)
 
     :param github_path: The GitHub repository path.
     :param exclude_exts: A list of file extensions to exclude (e.g., ['svg']).
     :param token: Optional GitHub token for accessing private repositories.
     """
+    # Allow input in org/name:branch or org/name format by defaulting to main branch if not provided.
     if not github_path.startswith("github://"):
-        raise ValueError("Only GitHub paths (starting with 'github://') are supported.")
+        if ':' in github_path:
+            repo_part, branch = github_path.split(":", 1)
+        else:
+            repo_part, branch = github_path, "main"
+        github_path = f"github://{repo_part}/{branch}"
 
     # Initialize GitHub filesystem using fsspec (pass token if provided)
-    if token:
-        fs = fsspec.filesystem("github", token=token)
-    else:
-        fs = fsspec.filesystem("github")
+    fs = fsspec.filesystem("github", token=token) if token else fsspec.filesystem("github")
     
     # Construct a glob pattern for recursive file search
     pattern = github_path.rstrip('/') + '/**'
@@ -34,7 +37,7 @@ def crawl_repo_files(github_path, exclude_exts=None, token=None):
             continue
         
         # Skip if not a file
-        if info.get('type', None) != 'file':
+        if info.get('type') != 'file':
             continue
         
         # Check file extension against exclusions
@@ -58,7 +61,12 @@ def main():
     parser = argparse.ArgumentParser(
         description="Crawl a GitHub repository and print each file's contents with line numbers."
     )
-    parser.add_argument("github_path", help="The GitHub repository path to crawl (e.g., github://user/repo/branch)")
+    parser.add_argument(
+        "github_path",
+        help=("The GitHub repository path to crawl. "
+              "Examples: 'org/name:branch' or 'org/name' (defaults to branch 'main') "
+              "or the full 'github://org/name/branch' format.")
+    )
     parser.add_argument(
         "--exclude",
         nargs='*',
