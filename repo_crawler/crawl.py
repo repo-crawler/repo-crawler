@@ -8,8 +8,9 @@ from pathlib import Path
 def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None, out=None):
     """
     Recursively crawls a GitHub repository using fsspec's GitHubFileSystem,
-    printing each file's content with a header and numbered lines, or the file's
-    name if writing to a file.
+    printing each file's content with a header and numbered lines, or printing just
+    the file path to the screen if an output file is specified. In either case,
+    the complete output is written to the output stream (stdout or a file).
 
     The github_path can be provided in one of the following formats:
       1. github://<org>/<repo>/<branch>[/optional/path]
@@ -19,7 +20,7 @@ def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None, 
     :param exclude_exts: A list of file extensions to exclude (e.g., ['svg', 'jpg']).
     :param token: Optional GitHub token for accessing private repositories.
     :param username: Optional GitHub username for accessing private repositories.
-    :param out: A file-like object to write the output to (default: sys.stdout).
+    :param out: A file-like object to write the complete output to (default: sys.stdout).
     """
     if out is None:
         out = sys.stdout
@@ -70,21 +71,21 @@ def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None, 
                 if ext in [e.lower() for e in exclude_exts]:
                     continue
 
-        # If output is not sys.stdout, print the file name.
+        # Write complete output (header and content) to the output stream.
+        print(f'# {path}', file=out)
+        try:
+            with fs.open(path, 'r') as f:
+                for i, line in enumerate(f, start=1):
+                    # Pad the line number to 5 digits.
+                    print(f'{i:05d}| {line}', end='', file=out)
+            # Insert a blank line between files.
+            print(file=out)
+        except Exception as e:
+            print(f"Error reading {path}: {e}", file=out)
+        
+        # If writing to a file, also print only the file path to the screen.
         if out != sys.stdout:
-            print(path, file=out)
-        else:
-            # Otherwise, print full output with header and line-numbered content.
-            print(f'# {path}', file=out)
-            try:
-                with fs.open(path, 'r') as f:
-                    for i, line in enumerate(f, start=1):
-                        # Pad the line number to 5 digits.
-                        print(f'{i:05d}| {line}', end='', file=out)
-                # Insert a blank line between files.
-                print(file=out)
-            except Exception as e:
-                print(f"Error reading {path}: {e}", file=out)
+            print(path)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -116,8 +117,9 @@ def main():
         "--out", "--output",
         dest="output",
         help=("Optional full output file path to write the scan results. "
-              "If specified, the file will contain the name of each file processed "
-              "instead of the full file contents. The path must be an absolute path to a file (not a directory) and include a file extension."),
+              "If specified, the complete output (headers and file contents) will be written to this file, "
+              "and only the file paths will be printed to the screen. "
+              "The path must be an absolute path to a file (not a directory) and include a file extension."),
         default=None
     )
     args = parser.parse_args()
