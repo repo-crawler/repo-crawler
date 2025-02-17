@@ -67,7 +67,7 @@ class TestCrawl(unittest.TestCase):
         fake_fs = FakeFS(fake_files)
         mock_filesystem.return_value = fake_fs
     
-        with patch('sys.stdout', new=io.StringIO()) as fake_out:
+        with patch("repo_crawler.crawl.sys.stdout", new_callable=io.StringIO) as fake_out:
             crawl_repo_files("github://user/repo/branch", exclude_exts=['svg'])
             output = fake_out.getvalue()
 
