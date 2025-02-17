@@ -69,20 +69,16 @@ def test_valid_path_with_exclusion(monkeypatch, capsys):
     monkeypatch.setattr("repo_crawler.crawl.fsspec.filesystem", lambda *args, **kwargs: fake_fs)
 
     crawl_repo_files("github://user/repo/branch", exclude_exts=['svg'])
-    # Force flush any buffered output.
-    sys.stdout.flush()
     captured = capsys.readouterr().out
 
-    # Check that file1.txt header and its contents (with padded line numbers) are present.
     assert "# github://user/repo/branch/file1.txt" in captured
     assert "00001| hello" in captured
     assert "00002| world" in captured
 
-    # Ensure that file2.svg and its contents are not printed.
     assert "file2.svg" not in captured
     assert "should be excluded" not in captured
 
-    # Ensure there is a blank line after the file content.
+    import re
     assert re.search(r"world\n\n", captured)
 
 def test_minimal_stdout_capture(capsys):
