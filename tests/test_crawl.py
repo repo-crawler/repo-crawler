@@ -75,6 +75,10 @@ def test_valid_path_with_exclusion(mock_filesystem, fake_fs_with_files, capsys):
     Test that crawl_repo_files prints file contents with headers and line numbers
     for valid files, and that files with excluded extensions are skipped.
     """
+    # Reset the capture buffer before our test
+    capsys.readouterr()
+    
+    # Set up our mock
     mock_filesystem.return_value = fake_fs_with_files
 
     # Call the function with svg files excluded
@@ -82,16 +86,16 @@ def test_valid_path_with_exclusion(mock_filesystem, fake_fs_with_files, capsys):
 
     # Capture the output
     captured = capsys.readouterr()
-    output = captured.out
 
-    # Check that file1.txt header and its contents (with padded line numbers) are present
-    assert "# github://user/repo/branch/file1.txt" in output
-    assert "00001| hello" in output
-    assert "00002| world" in output
+    # Split the output into lines for easier testing
+    lines = captured.out.splitlines()
 
-    # Ensure that file2.svg and its contents are not printed
-    assert "file2.svg" not in output
-    assert "should be excluded" not in output
+    # Verify each line individually
+    assert lines[0] == "# github://user/repo/branch/file1.txt"
+    assert lines[1] == "00001| hello"
+    assert lines[2] == "00002| world"
+    assert len(lines) == 4  # Including the blank line at the end
 
-    # Ensure there is a blank line after the file content
-    assert output.endswith("\n\n")
+    # Verify exclusions
+    assert all("file2.svg" not in line for line in lines)
+    assert all("should be excluded" not in line for line in lines)
