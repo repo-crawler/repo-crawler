@@ -2,6 +2,7 @@ import io
 import re
 import sys
 import pytest
+from unittest.mock import patch
 
 from repo_crawler.crawl import crawl_repo_files
 

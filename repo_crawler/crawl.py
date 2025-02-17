@@ -147,5 +147,11 @@ def main():
     else:
         crawl_repo_files(args.github_path, exclude_exts=args.exclude, token=args.token, username=args.username)
 
+    # Enforce that if a token is provided, a username must be provided.
+    if args.token and not args.username:
+        parser.error("When using --token, you must also provide --username.")
+
+    crawl_repo_files(args.github_path, exclude_exts=args.exclude, token=args.token, username=args.username)
+
 if __name__ == "__main__":
     main()
