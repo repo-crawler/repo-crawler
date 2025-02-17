@@ -12,12 +12,12 @@ class FakeFS:
     def __init__(self, files):
         """
         :param files: A dict mapping file paths to a tuple (content, info_dict).
-                      Example:
-                          {
-                              "github://user/repo/branch/file1.txt": ("hello\nworld\n", {'type': 'file'}),
-                              "github://user/repo/branch/file2.svg": ("should be excluded", {'type': 'file'}),
-                              "github://user/repo/branch/dir": ("", {'type': 'directory'}),
-                          }
+                                        Example:
+                                             {
+                                                 "github://user/repo/branch/file1.txt": ("hello\nworld\n", {'type': 'file'}),
+                                                 "github://user/repo/branch/file2.svg": ("should be excluded", {'type': 'file'}),
+                                                 "github://user/repo/branch/dir": ("", {'type': 'directory'}),
+                                             }
         """
         self.files = files
         self.last_glob = None  # Record the last glob pattern passed
@@ -73,7 +73,7 @@ class TestCrawl(unittest.TestCase):
         fake_fs = FakeFS(fake_files)
         mock_filesystem.return_value = fake_fs
 
-        # Capture printed output
+        # Capture printed output.
         captured_output = io.StringIO()
         original_stdout = sys.stdout
         sys.stdout = captured_output
@@ -84,14 +84,28 @@ class TestCrawl(unittest.TestCase):
         finally:
             sys.stdout = original_stdout
 
-        # Check that file1.txt header and its contents (with padded line numbers) are present
+        # Check that file1.txt header and its contents (with padded line numbers) are present.
         self.assertIn("# github://user/repo/branch/file1.txt", output)
         self.assertIn("00001| hello", output)
         self.assertIn("00002| world", output)
 
-        # Ensure that file2.svg and its contents are not printed
+        # Ensure that file2.svg and its contents are not printed.
         self.assertNotIn("file2.svg", output)
         self.assertNotIn("should be excluded", output)
 
-        # Ensure there is a blank line after the file content
+        # Ensure there is a blank line after the file content.
         self.assertRegex(output, r"world\n\n")
+
+    def test_minimal_stdout_capture(self):
+        captured_output = io.StringIO()
+        original_stdout = sys.stdout
+        sys.stdout = captured_output
+        try:
+            print("hello world")
+        finally:
+            sys.stdout = original_stdout
+        output = captured_output.getvalue()
+        self.assertIn("hello world", output)
+
+if __name__ == '__main__':
+    unittest.main()
