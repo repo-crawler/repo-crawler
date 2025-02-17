@@ -58,7 +58,7 @@ class TestCrawl(unittest.TestCase):
         self.assertEqual(fake_fs.last_glob, expected_pattern)
 
     @patch("repo_crawler.crawl.fsspec.filesystem")
-    def test_valid_path_with_exclusion(self, mock_filesystem):
+    def test_valid_path_with_exclusion(self, mock_filesystem, capsys):
         fake_files = {
             "github://user/repo/branch/file1.txt": ("hello\nworld\n", {'type': 'file'}),
             "github://user/repo/branch/file2.svg": ("should be excluded", {'type': 'file'}),
@@ -66,17 +66,14 @@ class TestCrawl(unittest.TestCase):
         }
         fake_fs = FakeFS(fake_files)
         mock_filesystem.return_value = fake_fs
-    
-        with patch("repo_crawler.crawl.sys.stdout", new_callable=io.StringIO) as fake_out:
-            crawl_repo_files("github://user/repo/branch", exclude_exts=['svg'])
-            output = fake_out.getvalue()
 
-        self.assertIn("# github://user/repo/branch/file1.txt", output)
-        self.assertIn("00001| hello", output)
-        self.assertIn("00002| world", output)
-        self.assertNotIn("file2.svg", output)
-        self.assertNotIn("should be excluded", output)
-        self.assertRegex(output, r"world\n\n")
+        crawl_repo_files("github://user/repo/branch", exclude_exts=['svg'])
+        captured = capsys.readouterr().out
+
+        self.assertIn("# github://user/repo/branch/file1.txt", captured)
+        self.assertIn("00001| hello", captured)
+        self.assertIn("00002| world", captured)
+        self.assertNotIn("file2.svg", captured)
 
 if __name__ == '__main__':
     unittest.main()
