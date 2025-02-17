@@ -1,7 +1,6 @@
-import unittest
-from unittest.mock import patch
 import io
-import sys
+import re
+import pytest
 
 from repo_crawler.crawl import crawl_repo_files
 
@@ -13,11 +12,11 @@ class FakeFS:
         """
         :param files: A dict mapping file paths to a tuple (content, info_dict).
             Example:
-                 {
-                     "github://user/repo/branch/file1.txt": ("hello\nworld\n", {'type': 'file'}),
-                     "github://user/repo/branch/file2.svg": ("should be excluded", {'type': 'file'}),
-                     "github://user/repo/branch/dir": ("", {'type': 'directory'}),
-                 }
+                {
+                    "github://user/repo/branch/file1.txt": ("hello\nworld\n", {'type': 'file'}),
+                    "github://user/repo/branch/file2.svg": ("should be excluded", {'type': 'file'}),
+                    "github://user/repo/branch/dir": ("", {'type': 'directory'}),
+                }
         """
         self.files = files
         self.last_glob = None  # Record the last glob pattern passed
@@ -38,66 +37,54 @@ class FakeFS:
             return io.StringIO(content)
         raise FileNotFoundError(f"No such file: {path}")
 
-class TestCrawl(unittest.TestCase):
-    @patch("repo_crawler.crawl.fsspec.filesystem")
-    def test_path_transformation(self, mock_filesystem):
-        """
-        Test that an input in the form "org/name" (without a prefix)
-        is transformed properly and that the glob pattern is correctly constructed.
-        Since the GitHub filesystem is initialized with org, repo, and ref,
-        the glob pattern is relative to the repository root.
-        """
-        fake_fs = FakeFS({})
-        mock_filesystem.return_value = fake_fs
+def test_path_transformation(monkeypatch):
+    """
+    Test that an input in the form "org/name" (without a prefix)
+    is transformed properly and that the glob pattern is correctly constructed.
+    Since the GitHub filesystem is initialized with org, repo, and ref,
+    the glob pattern is relative to the repository root.
+    """
+    fake_fs = FakeFS({})
+    # Replace the fsspec.filesystem in the crawl module with our fake filesystem.
+    monkeypatch.setattr("repo_crawler.crawl.fsspec.filesystem", lambda *args, **kwargs: fake_fs)
 
-        # Call with an input missing the 'github://' prefix.
-        crawl_repo_files("repo-crawler/repo-crawler")
+    # Call with an input missing the 'github://' prefix.
+    crawl_repo_files("repo-crawler/repo-crawler")
 
-        # With no subdirectory provided, the glob pattern should be just "**"
-        expected_pattern = "**"
-        self.assertEqual(fake_fs.last_glob, expected_pattern)
+    # With no subdirectory provided, the glob pattern should be just "**"
+    expected_pattern = "**"
+    assert fake_fs.last_glob == expected_pattern
 
-    @patch("repo_crawler.crawl.fsspec.filesystem")
-    def test_valid_path_with_exclusion(self, mock_filesystem, capsys):
-        """
-        Test that crawl_repo_files prints file contents with headers and line numbers
-        for valid files, and that files with excluded extensions are skipped.
-        """
-        fake_files = {
-            "github://user/repo/branch/file1.txt": ("hello\nworld\n", {'type': 'file'}),
-            "github://user/repo/branch/file2.svg": ("should be excluded", {'type': 'file'}),
-            "github://user/repo/branch/dir": ("", {'type': 'directory'}),
-        }
-        fake_fs = FakeFS(fake_files)
-        mock_filesystem.return_value = fake_fs
+def test_valid_path_with_exclusion(monkeypatch, capsys):
+    """
+    Test that crawl_repo_files prints file contents with headers and line numbers
+    for valid files, and that files with excluded extensions are skipped.
+    """
+    fake_files = {
+        "github://user/repo/branch/file1.txt": ("hello\nworld\n", {'type': 'file'}),
+        "github://user/repo/branch/file2.svg": ("should be excluded", {'type': 'file'}),
+        "github://user/repo/branch/dir": ("", {'type': 'directory'}),
+    }
+    fake_fs = FakeFS(fake_files)
+    monkeypatch.setattr("repo_crawler.crawl.fsspec.filesystem", lambda *args, **kwargs: fake_fs)
 
-        # Call the function; capsys will automatically capture output.
-        crawl_repo_files("github://user/repo/branch", exclude_exts=['svg'])
-        captured = capsys.readouterr().out
+    # Call the function; capsys automatically captures stdout.
+    crawl_repo_files("github://user/repo/branch", exclude_exts=['svg'])
+    captured = capsys.readouterr().out
 
-        # Check that file1.txt header and its contents (with padded line numbers) are present.
-        self.assertIn("# github://user/repo/branch/file1.txt", captured)
-        self.assertIn("00001| hello", captured)
-        self.assertIn("00002| world", captured)
+    # Check that file1.txt header and its contents (with padded line numbers) are present.
+    assert "# github://user/repo/branch/file1.txt" in captured
+    assert "00001| hello" in captured
+    assert "00002| world" in captured
 
-        # Ensure that file2.svg and its contents are not printed.
-        self.assertNotIn("file2.svg", captured)
-        self.assertNotIn("should be excluded", captured)
+    # Ensure that file2.svg and its contents are not printed.
+    assert "file2.svg" not in captured
+    assert "should be excluded" not in captured
 
-        # Ensure there is a blank line after the file content.
-        self.assertRegex(captured, r"world\n\n")
+    # Ensure there is a blank line after the file content.
+    assert re.search(r"world\n\n", captured)
 
-
-    def test_minimal_stdout_capture(self):
-        captured_output = io.StringIO()
-        original_stdout = sys.stdout
-        sys.stdout = captured_output
-        try:
-            print("hello world")
-        finally:
-            sys.stdout = original_stdout
-        output = captured_output.getvalue()
-        self.assertIn("hello world", output)
-
-if __name__ == '__main__':
-    unittest.main()
+def test_minimal_stdout_capture(capsys):
+    print("hello world")
+    captured = capsys.readouterr().out
+    assert "hello world" in captured
