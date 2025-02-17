@@ -1,5 +1,6 @@
 import io
 import re
+import sys
 import pytest
 
 from repo_crawler.crawl import crawl_repo_files
@@ -45,7 +46,6 @@ def test_path_transformation(monkeypatch):
     the glob pattern is relative to the repository root.
     """
     fake_fs = FakeFS({})
-    # Replace the fsspec.filesystem in the crawl module with our fake filesystem.
     monkeypatch.setattr("repo_crawler.crawl.fsspec.filesystem", lambda *args, **kwargs: fake_fs)
 
     # Call with an input missing the 'github://' prefix.
@@ -68,8 +68,9 @@ def test_valid_path_with_exclusion(monkeypatch, capsys):
     fake_fs = FakeFS(fake_files)
     monkeypatch.setattr("repo_crawler.crawl.fsspec.filesystem", lambda *args, **kwargs: fake_fs)
 
-    # Call the function; capsys automatically captures stdout.
     crawl_repo_files("github://user/repo/branch", exclude_exts=['svg'])
+    # Force flush any buffered output.
+    sys.stdout.flush()
     captured = capsys.readouterr().out
 
     # Check that file1.txt header and its contents (with padded line numbers) are present.
