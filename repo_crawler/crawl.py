@@ -1,7 +1,11 @@
 import fsspec
 import argparse
+import sys
+import os
+import logging
+from pathlib import Path
 
-def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None):
+def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None, out=sys.stdout):
     """
     Recursively crawls a GitHub repository using fsspec's GitHubFileSystem,
     printing each file's content with a header and numbered lines.
@@ -14,6 +18,7 @@ def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None):
     :param exclude_exts: A list of file extensions to exclude (e.g., ['svg']).
     :param token: Optional GitHub token for accessing private repositories.
     :param username: Optional GitHub username for accessing private repositories.
+    :param out: A file-like object to write the output to (default: sys.stdout).
     """
     # Parse the input to extract org, repo, branch (ref), and optional subdirectory.
     if github_path.startswith("github://"):
@@ -47,7 +52,7 @@ def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None):
         try:
             info = fs.info(path)
         except Exception as e:
-            print(f"Could not get info for {path}: {e}")
+            print(f"Could not get info for {path}: {e}", file=out)
             continue
 
         # Skip if not a file.
@@ -61,18 +66,18 @@ def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None):
                 continue
 
         # Print header with file path.
-        print(f'# {path}')
+        print(f'# {path}', file=out)
 
         # Open and print file contents with line numbers.
         try:
             with fs.open(path, 'r') as f:
                 for i, line in enumerate(f, start=1):
                     # Pad the line number to 5 digits.
-                    print(f'{i:05d}| {line}', end='')
+                    print(f'{i:05d}| {line}', end='', file=out)
             # Insert a blank line between files.
-            print()
+            print(file=out)
         except Exception as e:
-            print(f"Error reading {path}: {e}")
+            print(f"Error reading {path}: {e}", file=out)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -100,9 +105,47 @@ def main():
         help="GitHub username for accessing private repositories (required if token is provided)",
         default=None
     )
+    parser.add_argument(
+        "--output",
+        help=("Optional full output file path to write the scan results. "
+              "The path must be an absolute path to a file (not a directory) and include a file extension."),
+        default=None
+    )
     args = parser.parse_args()
 
-    crawl_repo_files(args.github_path, exclude_exts=args.exclude, token=args.token, username=args.username)
+    # Set up basic logging configuration.
+    logging.basicConfig(level=logging.INFO)
+
+    if args.output:
+        output_path = args.output
+
+        # Validate that the output path is a full absolute path.
+        if not os.path.isabs(output_path):
+            raise ValueError("Output path must be a full absolute path.")
+        # Ensure the output path does not end with a path separator (i.e. is not a directory).
+        if output_path.endswith(os.sep):
+            raise ValueError("Output path must be a file, not a directory.")
+        # Check that the basename has an extension.
+        if not os.path.splitext(os.path.basename(output_path))[1]:
+            raise ValueError("Output file must have an extension.")
+
+        output_dir = os.path.dirname(output_path)
+        if not os.path.isdir(output_dir):
+            # Create missing subdirectories and log each folder as it is created.
+            p = Path(output_dir)
+            missing_dirs = []
+            while not p.exists() and p.parent != p:
+                missing_dirs.append(p)
+                p = p.parent
+            for d in reversed(missing_dirs):
+                logging.info(f"Creating directory: {d}")
+                os.mkdir(d)
+
+        # Open the output file and pass its handle to crawl_repo_files.
+        with open(output_path, "w", encoding="utf-8") as out_file:
+            crawl_repo_files(args.github_path, exclude_exts=args.exclude, token=args.token, username=args.username, out=out_file)
+    else:
+        crawl_repo_files(args.github_path, exclude_exts=args.exclude, token=args.token, username=args.username)
 
 if __name__ == "__main__":
     main()
