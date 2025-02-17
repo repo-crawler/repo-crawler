@@ -8,7 +8,8 @@ from pathlib import Path
 def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None, out=None):
     """
     Recursively crawls a GitHub repository using fsspec's GitHubFileSystem,
-    printing each file's content with a header and numbered lines, or a running count if writing to a file.
+    printing each file's content with a header and numbered lines, or the file's
+    name if writing to a file.
 
     The github_path can be provided in one of the following formats:
       1. github://<org>/<repo>/<branch>[/optional/path]
@@ -50,7 +51,6 @@ def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None, 
     pattern = f"{subdir}/**" if subdir else "**"
     all_paths = fs.glob(pattern, recursive=True)
 
-    file_count = 0
     for path in all_paths:
         try:
             info = fs.info(path)
@@ -70,11 +70,9 @@ def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None, 
                 if ext in [e.lower() for e in exclude_exts]:
                     continue
 
-        file_count += 1
-
-        # If output is not sys.stdout, print only the running count.
+        # If output is not sys.stdout, print the file name.
         if out != sys.stdout:
-            print(f"{file_count}", file=out)
+            print(path, file=out)
         else:
             # Otherwise, print full output with header and line-numbered content.
             print(f'# {path}', file=out)
@@ -118,7 +116,7 @@ def main():
         "--out", "--output",
         dest="output",
         help=("Optional full output file path to write the scan results. "
-              "If specified, the file will contain a running count (one number per file processed) "
+              "If specified, the file will contain the name of each file processed "
               "instead of the full file contents. The path must be an absolute path to a file (not a directory) and include a file extension."),
         default=None
     )
