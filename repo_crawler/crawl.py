@@ -67,7 +67,10 @@ def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None):
         try:
             with fs.open(path, 'r') as f:
                 for i, line in enumerate(f, start=1):
-                    print(f'{i}| {line}', end='')
+                    # Pad the line number to 5 digits.
+                    print(f'{i:05d}| {line}', end='')
+            # Insert a blank line between files.
+            print()
         except Exception as e:
             print(f"Error reading {path}: {e}")
 

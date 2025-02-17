@@ -84,14 +84,17 @@ class TestCrawl(unittest.TestCase):
         finally:
             sys.stdout = original_stdout
 
-        # Check that file1.txt header and its contents (with line numbers) are present.
+        # Check that file1.txt header and its contents (with padded line numbers) are present.
         self.assertIn("# github://user/repo/branch/file1.txt", output)
-        self.assertIn("1| hello", output)
-        self.assertIn("2| world", output)
+        self.assertIn("00001| hello", output)
+        self.assertIn("00002| world", output)
 
         # Ensure that file2.svg and its contents are not printed.
         self.assertNotIn("file2.svg", output)
         self.assertNotIn("should be excluded", output)
+
+        # Ensure there is a blank line after the file content.
+        self.assertRegex(output, r"world\n\n")
 
 if __name__ == '__main__':
     unittest.main()
