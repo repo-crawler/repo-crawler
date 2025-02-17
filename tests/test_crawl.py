@@ -79,19 +79,19 @@ def test_valid_path_with_exclusion(mock_filesystem, fake_fs_with_files, capsys):
 
     # Call the function with svg files excluded
     crawl_repo_files("github://user/repo/branch", exclude_exts=['svg'])
-    
-    # Capture the output immediately, while still in the patched context
-    captured = capsys.readouterr().out
+
+    # Capture the output
+    captured = capsys.readouterr()
+    output = captured.out
 
     # Check that file1.txt header and its contents (with padded line numbers) are present
-    assert "# github://user/repo/branch/file1.txt" in captured
-    assert "00001| hello" in captured
-    assert "00002| world" in captured
+    assert "# github://user/repo/branch/file1.txt" in output
+    assert "00001| hello" in output
+    assert "00002| world" in output
 
     # Ensure that file2.svg and its contents are not printed
-    assert "file2.svg" not in captured
-    assert "should be excluded" not in captured
+    assert "file2.svg" not in output
+    assert "should be excluded" not in output
 
     # Ensure there is a blank line after the file content
-    assert "world\n\n" in captured
-
+    assert output.endswith("\n\n")
