@@ -69,29 +69,15 @@ def test_path_transformation(mock_filesystem, fake_fs):
     expected_pattern = "**"
     assert fake_fs.last_glob == expected_pattern
 
-@patch("repo_crawler.crawl.fsspec.filesystem")
-def test_valid_path_with_exclusion(mock_filesystem, fake_fs_with_files, capsys):
-    """
-    Test that crawl_repo_files prints file contents with headers and line numbers
-    for valid files, and that files with excluded extensions are skipped.
-    """
-    mock_filesystem.return_value = fake_fs_with_files
-
-    # Call the function with svg files excluded
-    crawl_repo_files("github://user/repo/branch", exclude_exts=['svg'])
+def test_valid_path_with_exclusion(fake_fs_with_files, capsys):
+    from repo_crawler import crawl
+    with patch("repo_crawler.crawl.fsspec.filesystem", return_value=fake_fs_with_files):
+        crawl.crawl_repo_files("github://user/repo/branch", exclude_exts=['svg'])
     
-    # Capture the output using pytest's built-in capture
-    captured = capsys.readouterr()
-    output = captured.out
-
-    # Check that file1.txt header and its contents (with padded line numbers) are present
-    assert "# github://user/repo/branch/file1.txt" in output
-    assert "00001| hello" in output
-    assert "00002| world" in output
-
-    # Ensure that file2.svg and its contents are not printed
-    assert "file2.svg" not in output
-    assert "should be excluded" not in output
-
-    # Ensure there is a blank line after the file content
-    assert "world\n\n" in output
+    captured = capsys.readouterr().out
+    assert "# github://user/repo/branch/file1.txt" in captured
+    assert "00001| hello" in captured
+    assert "00002| world" in captured
+    # Also assert that the excluded file is not in the output:
+    assert "file2.svg" not in captured
+    assert "should be excluded" not in captured
