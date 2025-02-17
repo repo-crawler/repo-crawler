@@ -5,7 +5,7 @@ import os
 import logging
 from pathlib import Path
 
-def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None, out=sys.stdout):
+def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None, out=None):
     """
     Recursively crawls a GitHub repository using fsspec's GitHubFileSystem,
     printing each file's content with a header and numbered lines.
@@ -20,6 +20,9 @@ def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None, 
     :param username: Optional GitHub username for accessing private repositories.
     :param out: A file-like object to write the output to (default: sys.stdout).
     """
+    if out is None:
+        out = sys.stdout
+
     # Parse the input to extract org, repo, branch (ref), and optional subdirectory.
     if github_path.startswith("github://"):
         path_without_prefix = github_path[len("github://"):]
