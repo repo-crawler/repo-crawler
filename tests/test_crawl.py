@@ -12,12 +12,12 @@ class FakeFS:
     def __init__(self, files):
         """
         :param files: A dict mapping file paths to a tuple (content, info_dict).
-                                        Example:
-                                             {
-                                                 "github://user/repo/branch/file1.txt": ("hello\nworld\n", {'type': 'file'}),
-                                                 "github://user/repo/branch/file2.svg": ("should be excluded", {'type': 'file'}),
-                                                 "github://user/repo/branch/dir": ("", {'type': 'directory'}),
-                                             }
+            Example:
+                 {
+                     "github://user/repo/branch/file1.txt": ("hello\nworld\n", {'type': 'file'}),
+                     "github://user/repo/branch/file2.svg": ("should be excluded", {'type': 'file'}),
+                     "github://user/repo/branch/dir": ("", {'type': 'directory'}),
+                 }
         """
         self.files = files
         self.last_glob = None  # Record the last glob pattern passed
@@ -58,13 +58,11 @@ class TestCrawl(unittest.TestCase):
         self.assertEqual(fake_fs.last_glob, expected_pattern)
 
     @patch("repo_crawler.crawl.fsspec.filesystem")
-    def test_valid_path_with_exclusion(self, mock_filesystem):
+    def test_valid_path_with_exclusion(self, mock_filesystem, capsys):
         """
         Test that crawl_repo_files prints file contents with headers and line numbers
         for valid files, and that files with excluded extensions are skipped.
         """
-        # Setup fake files: one valid text file, one file with an excluded extension,
-        # and one directory (which should be ignored).
         fake_files = {
             "github://user/repo/branch/file1.txt": ("hello\nworld\n", {'type': 'file'}),
             "github://user/repo/branch/file2.svg": ("should be excluded", {'type': 'file'}),
@@ -73,28 +71,22 @@ class TestCrawl(unittest.TestCase):
         fake_fs = FakeFS(fake_files)
         mock_filesystem.return_value = fake_fs
 
-        # Capture printed output.
-        captured_output = io.StringIO()
-        original_stdout = sys.stdout
-        sys.stdout = captured_output
-
-        try:
-            crawl_repo_files("github://user/repo/branch", exclude_exts=['svg'])
-            output = captured_output.getvalue()
-        finally:
-            sys.stdout = original_stdout
+        # Call the function; capsys will automatically capture output.
+        crawl_repo_files("github://user/repo/branch", exclude_exts=['svg'])
+        captured = capsys.readouterr().out
 
         # Check that file1.txt header and its contents (with padded line numbers) are present.
-        self.assertIn("# github://user/repo/branch/file1.txt", output)
-        self.assertIn("00001| hello", output)
-        self.assertIn("00002| world", output)
+        self.assertIn("# github://user/repo/branch/file1.txt", captured)
+        self.assertIn("00001| hello", captured)
+        self.assertIn("00002| world", captured)
 
         # Ensure that file2.svg and its contents are not printed.
-        self.assertNotIn("file2.svg", output)
-        self.assertNotIn("should be excluded", output)
+        self.assertNotIn("file2.svg", captured)
+        self.assertNotIn("should be excluded", captured)
 
         # Ensure there is a blank line after the file content.
-        self.assertRegex(output, r"world\n\n")
+        self.assertRegex(captured, r"world\n\n")
+
 
     def test_minimal_stdout_capture(self):
         captured_output = io.StringIO()
