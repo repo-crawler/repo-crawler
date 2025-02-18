@@ -5,7 +5,7 @@ import os
 import logging
 from pathlib import Path
 
-def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None, out=None):
+def crawl_repo_files(github_path, include_exts=None, exclude_exts=None, token=None, username=None, out=None):
     """
     Recursively crawls a GitHub repository using fsspec's GitHubFileSystem,
     printing each file's content with a header and numbered lines.
@@ -15,19 +15,21 @@ def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None, 
       2. <org>/<repo>:<branch> or <org>/<repo> (branch defaults to "main" if omitted)
 
     :param github_path: The GitHub repository path.
-    :param exclude_exts: A list of file extensions to exclude (e.g., ['svg']).
-    :param token: Optional GitHub token for accessing private repositories.
-    :param username: Optional GitHub username for accessing private repositories.
-    :param out: A file-like object to write the output to (default: sys.stdout).
+    :param include_exts: A list of file extensions to include (e.g., ['py', 'txt']).
+                         If provided, ONLY these files will be processed.
+    :param exclude_exts: A list of file extensions to ignore (e.g., ['svg', 'png']).
+                         This parameter is ignored if include_exts is provided.
+    :param token: An optional GitHub personal access token.
+    :param username: The GitHub username associated with the token. Required if token is provided.
+    :param out: A file-like object to write the output to. Defaults to sys.stdout.
     """
     if out is None:
         out = sys.stdout
 
-    # Parse the input to extract org, repo, branch (ref), and optional subdirectory.
+    # Parse the input path (supports various formats)
     if github_path.startswith("github://"):
         path_without_prefix = github_path[len("github://"):]
     else:
-        # Support input like "org/repo:branch" or "org/repo"
         if ':' in github_path:
             repo_part, branch = github_path.split(":", 1)
         else:
@@ -40,14 +42,12 @@ def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None, 
     org = parts[0]
     repo = parts[1]
     ref = parts[2] if len(parts) >= 3 else "main"
-    # Anything after the branch is treated as an optional subdirectory.
     subdir = '/'.join(parts[3:]) if len(parts) > 3 else ""
 
-    # Initialize the GitHub filesystem with the required parameters.
+    # Use fsspec's GitHubFileSystem to access files (works with local or GitHub repos)
     fs = fsspec.filesystem("github", org=org, repo=repo, ref=ref, token=token, username=username)
 
-    # Construct the glob pattern. Note: The GitHubFileSystem works with paths
-    # relative to the repository root, so we use the subdir if provided.
+    # Build the glob pattern for recursive search
     pattern = f"{subdir}/**" if subdir else "**"
     all_paths = fs.glob(pattern, recursive=True)
 
@@ -58,27 +58,32 @@ def crawl_repo_files(github_path, exclude_exts=None, token=None, username=None, 
             print(f"Could not get info for {path}: {e}", file=out)
             continue
 
-        # Skip if not a file.
+        # Only process files (skip directories)
         if info.get('type') != 'file':
             continue
 
-        # Check file extension against exclusions.
-        if exclude_exts:
+        # --- Filtering Logic ---
+        # If include_exts is provided, only process files with these extensions.
+        # Otherwise, if exclude_exts is provided, skip files with those extensions.
+        if include_exts:
+            parts_split = path.rsplit('.', 1)
+            if len(parts_split) < 2 or parts_split[1] not in include_exts:
+                continue  # Skip file if its extension is not in the include list
+        elif exclude_exts:
             parts_split = path.rsplit('.', 1)
             if len(parts_split) == 2 and parts_split[1] in exclude_exts:
-                continue
+                continue  # Skip file if its extension is in the exclude list
 
-        # Print header with file path.
-        print(f'# {path}', file=out)
+        # Print a header line with the file path
+        print(f"# {path}", file=out)
 
-        # Open and print file contents with line numbers.
+        # Open the file and print its contents with 5-digit, zero-padded line numbers
         try:
             with fs.open(path, 'r') as f:
                 for i, line in enumerate(f, start=1):
-                    # Pad the line number to 5 digits.
-                    print(f'{i:05d}| {line}', end='', file=out)
-            # Insert a blank line between files.
-            print(file=out)
+                    print(f"{i:05d}| {line}", end='', file=out)
+                # Print a blank line after each file
+                print(file=out)
         except Exception as e:
             print(f"Error reading {path}: {e}", file=out)
 
@@ -92,11 +97,19 @@ def main():
               "Examples: 'org/repo:branch' or 'org/repo' (defaults to branch 'main') "
               "or the full 'github://org/repo/branch[/optional/path]' format.")
     )
-    parser.add_argument(
+    # Create a mutually exclusive group for include and exclude flags.
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--include",
+        nargs='*',
+        default=[],
+        help="List of file extensions to include (e.g., py txt). If provided, ONLY these files are processed."
+    )
+    group.add_argument(
         "--exclude",
         nargs='*',
         default=[],
-        help="List of file extensions to exclude (e.g., svg)"
+        help="List of file extensions to exclude (e.g., svg png)."
     )
     parser.add_argument(
         "--token",
@@ -114,14 +127,15 @@ def main():
               "The path must be an absolute path to a file (not a directory) and include a file extension."),
         default=None
     )
+
     args = parser.parse_args()
 
-    # Set up basic logging configuration.
-    logging.basicConfig(level=logging.INFO)
+    # Enforce that if a token is provided, a username must also be provided.
+    if args.token and not args.username:
+        parser.error("When using --token, you must also provide --username.")
 
     if args.output:
         output_path = args.output
-
         # Validate that the output path is a full absolute path.
         if not os.path.isabs(output_path):
             raise ValueError("Output path must be a full absolute path.")
@@ -131,7 +145,6 @@ def main():
         # Check that the basename has an extension.
         if not os.path.splitext(os.path.basename(output_path))[1]:
             raise ValueError("Output file must have an extension.")
-
         output_dir = os.path.dirname(output_path)
         if not os.path.isdir(output_dir):
             # Create missing subdirectories and log each folder as it is created.
@@ -144,17 +157,23 @@ def main():
                 logging.info(f"Creating directory: {d}")
                 os.mkdir(d)
 
-        # Open the output file and pass its handle to crawl_repo_files.
         with open(output_path, "w", encoding="utf-8") as out_file:
-            crawl_repo_files(args.github_path, exclude_exts=args.exclude, token=args.token, username=args.username, out=out_file)
+            crawl_repo_files(
+                args.github_path,
+                include_exts=args.include,
+                exclude_exts=args.exclude,
+                token=args.token,
+                username=args.username,
+                out=out_file
+            )
     else:
-        crawl_repo_files(args.github_path, exclude_exts=args.exclude, token=args.token, username=args.username)
-
-    # Enforce that if a token is provided, a username must be provided.
-    if args.token and not args.username:
-        parser.error("When using --token, you must also provide --username.")
-
-    crawl_repo_files(args.github_path, exclude_exts=args.exclude, token=args.token, username=args.username)
+        crawl_repo_files(
+            args.github_path,
+            include_exts=args.include,
+            exclude_exts=args.exclude,
+            token=args.token,
+            username=args.username
+        )
 
 if __name__ == "__main__":
     main()
