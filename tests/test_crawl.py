@@ -2,22 +2,23 @@ import pytest
 from unittest.mock import patch
 import io
 import re
+import sys
 
-from repo_crawler.crawl import crawl_repo_files
+from repo_crawler.crawl import crawl_repo_files, main
 
 class FakeFS:
     """
-    A fake filesystem to simulate fsspec's GitHub filesystem for testing.
+    A fake filesystem to simulate fsspec's GitHubFileSystem for testing.
     """
     def __init__(self, files):
         """
-        :param files: A dict mapping file paths to a tuple (content, info_dict).
-                        Example:
-                            {
-                                "github://user/repo/branch/file1.txt": ("hello\nworld\n", {'type': 'file'}),
-                                "github://user/repo/branch/file2.svg": ("should be excluded", {'type': 'file'}),
-                                "github://user/repo/branch/dir": ("", {'type': 'directory'}),
-                            }
+        Initialize FakeFS with a dictionary mapping file paths to tuples of (file_content, info_dict).
+        Example:
+            {
+                "github://user/repo/branch/file1.txt": ("hello\nworld\n", {'type': 'file'}),
+                "github://user/repo/branch/file2.svg": ("should be excluded", {'type': 'file'}),
+                "github://user/repo/branch/dir": ("", {'type': 'directory'}),
+            }
         """
         self.files = files
         self.last_glob = None  # Record the last glob pattern passed
@@ -49,6 +50,7 @@ def fake_fs_with_files():
     files = {
         "github://user/repo/branch/file1.txt": ("hello\nworld\n", {'type': 'file'}),
         "github://user/repo/branch/file2.svg": ("should be excluded", {'type': 'file'}),
+        "github://user/repo/branch/file3.py": ("print('hello')", {'type': 'file'}),
         "github://user/repo/branch/dir": ("", {'type': 'directory'}),
     }
     return FakeFS(files)
@@ -58,39 +60,49 @@ def test_path_transformation(mock_filesystem, fake_fs):
     """
     Test that an input in the form "org/name" (without a prefix)
     is transformed properly and that the glob pattern is correctly constructed.
-    Since the GitHub filesystem is initialized with org, repo, and ref,
-    the glob pattern is relative to the repository root.
     """
     mock_filesystem.return_value = fake_fs
-
-    # Call with an input missing the 'github://' prefix
     crawl_repo_files("repo-crawler/repo-crawler")
-
-    # With no subdirectory provided, the glob pattern should be just "**"
     expected_pattern = "**"
     assert fake_fs.last_glob == expected_pattern
 
 @patch("repo_crawler.crawl.fsspec.filesystem")
 def test_valid_path_with_exclusion(mock_filesystem, fake_fs_with_files, capsys):
     """
-    Test that crawl_repo_files prints file contents with headers and line numbers
-    for valid files, and that files with excluded extensions are skipped.
+    Test that files with extensions in the exclusion list are skipped.
     """
     mock_filesystem.return_value = fake_fs_with_files
-
-    # Call the function with svg files excluded
     crawl_repo_files("github://user/repo/branch", exclude_exts=['svg'])
-
-    # Capture the output
     captured = capsys.readouterr()
     output = captured.out
 
-    # Use regular expressions for more robust checking.  This avoids issues with
-    # trailing newlines and makes the test less brittle.
+    # Ensure file1.txt and file3.py are processed, but file2.svg is excluded.
     assert re.search(r"^# github://user/repo/branch/file1\.txt$", output, re.MULTILINE)
-    assert re.search(r"^00001\| hello$", output, re.MULTILINE)
-    assert re.search(r"^00002\| world$", output, re.MULTILINE)
-
-    # Ensure that file2.svg and its contents are not printed
     assert "file2.svg" not in output
-    assert "should be excluded" not in output
+    assert "file3.py" in output
+
+@patch("repo_crawler.crawl.fsspec.filesystem")
+def test_valid_path_with_inclusion(mock_filesystem, fake_fs_with_files, capsys):
+    """
+    Test that only files with extensions in the inclusion list are processed.
+    """
+    mock_filesystem.return_value = fake_fs_with_files
+    crawl_repo_files("github://user/repo/branch", include_exts=['py'])
+    captured = capsys.readouterr()
+    output = captured.out
+
+    # Only file3.py should be processed.
+    assert "file1.txt" not in output
+    assert "file2.svg" not in output
+    assert re.search(r"^# github://user/repo/branch/file3\.py$", output, re.MULTILINE)
+    assert re.search(r"^00001\| print\('hello'\)$", output, re.MULTILINE)
+
+def test_include_exclude_mutual_exclusivity(monkeypatch):
+    """
+    Verify that using both --include and --exclude flags results in an error.
+    This test simulates command-line arguments and expects a SystemExit.
+    """
+    test_args = ["prog", "github://user/repo/branch", "--include", "py", "--exclude", "txt"]
+    monkeypatch.setattr(sys, "argv", test_args)
+    with pytest.raises(SystemExit):
+        main()
