@@ -107,20 +107,12 @@ def test_include_exclude_mutual_exclusivity(monkeypatch):
     with pytest.raises(SystemExit):
         main()
 
-@patch("repo_crawler.crawl.fsspec.filesystem")
-def test_invalid_branch_error(mock_filesystem, fake_fs):
+@patch("repo_crawler.crawl.verify_branch_exists", side_effect=ValueError("Branch 'invalidbranch' does not exist in repository 'user/repo'."))
+def test_invalid_branch_error(mock_verify):
     """
     Test that a ValueError with an appropriate message is raised
-    when fs.glob fails due to an invalid branch.
+    when the branch verification fails due to an invalid branch.
     """
-    # Simulate an error when attempting to glob (e.g., due to an invalid branch)
-    def glob_raise(pattern, recursive):
-        raise Exception("Simulated error: branch not found")
-    fake_fs.glob = glob_raise
-    mock_filesystem.return_value = fake_fs
-
-    # Using a repository path with an invalid branch
     invalid_path = "github://user/repo/invalidbranch"
-
-    with pytest.raises(ValueError, match=r"Failed to access branch 'invalidbranch' in repository 'user/repo'"):
+    with pytest.raises(ValueError, match=r"Branch 'invalidbranch' does not exist in repository 'user/repo'."):
         crawl_repo_files(invalid_path)
