@@ -49,7 +49,13 @@ def crawl_repo_files(github_path, include_exts=None, exclude_exts=None, token=No
 
     # Build the glob pattern for recursive search
     pattern = f"{subdir}/**" if subdir else "**"
-    all_paths = fs.glob(pattern, recursive=True)
+    try:
+        all_paths = fs.glob(pattern, recursive=True)
+    except Exception as e:
+        raise ValueError(
+            f"Failed to access branch '{ref}' in repository '{org}/{repo}'. "
+            "Please verify that the branch exists."
+        ) from e
 
     for path in all_paths:
         try:
