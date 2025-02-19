@@ -150,4 +150,61 @@ def main():
     )
     parser.add_argument(
         "--username",
-        help="GitHub username for accessing private repositories (required if token is pro
+        help="GitHub username for accessing private repositories (required if token is provided)",
+        default=None
+    )
+    parser.add_argument(
+        "--output",
+        help=("Optional full output file path to write the scan results. "
+              "The path must be an absolute path to a file (not a directory) and include a file extension."),
+        default=None
+    )
+
+    args = parser.parse_args()
+
+    # Enforce that if a token is provided, a username must also be provided.
+    if args.token and not args.username:
+        parser.error("When using --token, you must also provide --username.")
+
+    if args.output:
+        output_path = args.output
+        # Validate that the output path is a full absolute path.
+        if not os.path.isabs(output_path):
+            raise ValueError("Output path must be a full absolute path.")
+        # Ensure the output path does not end with a path separator (i.e. is not a directory).
+        if output_path.endswith(os.sep):
+            raise ValueError("Output path must be a file, not a directory.")
+        # Check that the basename has an extension.
+        if not os.path.splitext(os.path.basename(output_path))[1]:
+            raise ValueError("Output file must have an extension.")
+        output_dir = os.path.dirname(output_path)
+        if not os.path.isdir(output_dir):
+            # Create missing subdirectories and log each folder as it is created.
+            p = Path(output_dir)
+            missing_dirs = []
+            while not p.exists() and p.parent != p:
+                missing_dirs.append(p)
+                p = p.parent
+            for d in reversed(missing_dirs):
+                logging.info(f"Creating directory: {d}")
+                os.mkdir(d)
+        with open(output_path, "w", encoding="utf-8") as out_file:
+            crawl_repo_files(
+                args.github_path,
+                include_exts=args.include,
+                exclude_exts=args.exclude,
+                token=args.token,
+                username=args.username,
+                out=out_file
+            )
+    else:
+        crawl_repo_files(
+            args.github_path,
+            include_exts=args.include,
+            exclude_exts=args.exclude,
+            token=args.token,
+            username=args.username
+        )
+
+if __name__ == "__main__":
+    main()
