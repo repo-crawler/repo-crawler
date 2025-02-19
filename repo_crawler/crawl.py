@@ -22,7 +22,7 @@ def verify_branch_exists(org, repo, branch, token=None):
 
 def crawl_repo_files(github_path, include_exts=None, exclude_exts=None, token=None, username=None, out=None):
     """
-    Recursively crawls a GitHub repository using fsspec's GitHubFileSystem,
+    Recursively crawls a GitHub repository using fsspec's GithubFileSystem,
     printing each file's content with a header and numbered lines.
 
     The github_path can be provided in one of the following formats:
@@ -62,9 +62,9 @@ def crawl_repo_files(github_path, include_exts=None, exclude_exts=None, token=No
     # Verify that the specified branch actually exists.
     verify_branch_exists(org, repo, ref, token)
 
-    # Use the dedicated GitHubFileSystem to ensure the branch is honored.
-    from fsspec.implementations.github import GitHubFileSystem
-    fs = GitHubFileSystem(org=org, repo=repo, ref=ref, token=token, username=username)
+    # Use the dedicated GithubFileSystem to ensure the branch is honored.
+    from fsspec.implementations.github import GithubFileSystem
+    fs = GithubFileSystem(org=org, repo=repo, ref=ref, token=token, username=username)
 
     # Build the glob pattern for recursive search.
     pattern = f"{subdir}/**" if subdir else "**"
