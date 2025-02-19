@@ -40,11 +40,6 @@ class FakeFS:
         raise FileNotFoundError(f"No such file: {path}")
 
 @pytest.fixture
-def fake_fs():
-    """Fixture providing an empty FakeFS instance."""
-    return FakeFS({})
-
-@pytest.fixture
 def fake_fs_with_files():
     """Fixture providing a FakeFS instance with test files."""
     files = {
@@ -55,19 +50,24 @@ def fake_fs_with_files():
     }
     return FakeFS(files)
 
+# For tests that need a valid branch, we patch verify_branch_exists to do nothing.
+@patch("repo_crawler.crawl.verify_branch_exists", return_value=None)
 @patch("repo_crawler.crawl.fsspec.filesystem")
-def test_path_transformation(mock_filesystem, fake_fs):
+def test_path_transformation(mock_filesystem, mock_verify, fake_fs_with_files):
     """
     Test that an input in the form "org/name" (without a prefix)
     is transformed properly and that the glob pattern is correctly constructed.
     """
-    mock_filesystem.return_value = fake_fs
-    crawl_repo_files("repo-crawler/repo-crawler")
+    mock_filesystem.return_value = fake_fs_with_files
+    # "repo-crawler/repo-crawler" will default to branch "main"
+    # To prevent the "no files" error, we simulate that FakeFS returns files.
+    crawl_repo_files("repo-crawler/repo-crawler", out=io.StringIO())
     expected_pattern = "**"
-    assert fake_fs.last_glob == expected_pattern
+    assert fake_fs_with_files.last_glob == expected_pattern
 
+@patch("repo_crawler.crawl.verify_branch_exists", return_value=None)
 @patch("repo_crawler.crawl.fsspec.filesystem")
-def test_valid_path_with_exclusion(mock_filesystem, fake_fs_with_files, capsys):
+def test_valid_path_with_exclusion(mock_filesystem, mock_verify, fake_fs_with_files, capsys):
     """
     Test that files with extensions in the exclusion list are skipped.
     """
@@ -81,8 +81,9 @@ def test_valid_path_with_exclusion(mock_filesystem, fake_fs_with_files, capsys):
     assert "file2.svg" not in output
     assert "file3.py" in output
 
+@patch("repo_crawler.crawl.verify_branch_exists", return_value=None)
 @patch("repo_crawler.crawl.fsspec.filesystem")
-def test_valid_path_with_inclusion(mock_filesystem, fake_fs_with_files, capsys):
+def test_valid_path_with_inclusion(mock_filesystem, mock_verify, fake_fs_with_files, capsys):
     """
     Test that only files with extensions in the inclusion list are processed.
     """
@@ -107,20 +108,12 @@ def test_include_exclude_mutual_exclusivity(monkeypatch):
     with pytest.raises(SystemExit):
         main()
 
-@patch("repo_crawler.crawl.fsspec.filesystem")
-def test_invalid_branch_error(mock_filesystem, fake_fs):
+@patch("repo_crawler.crawl.verify_branch_exists", side_effect=ValueError("Branch 'invalidbranch' does not exist in repository 'user/repo'."))
+def test_invalid_branch_error(mock_verify):
     """
     Test that a ValueError with an appropriate message is raised
-    when fs.glob fails due to an invalid branch.
+    when the branch verification fails due to an invalid branch.
     """
-    # Simulate an error when attempting to glob (e.g., due to an invalid branch)
-    def glob_raise(pattern, recursive):
-        raise Exception("Simulated error: branch not found")
-    fake_fs.glob = glob_raise
-    mock_filesystem.return_value = fake_fs
-
-    # Using a repository path with an invalid branch
     invalid_path = "github://user/repo/invalidbranch"
-
-    with pytest.raises(ValueError, match=r"Failed to access branch 'invalidbranch' in repository 'user/repo'"):
+    with pytest.raises(ValueError, match=r"Branch 'invalidbranch' does not exist in repository 'user/repo'."):
         crawl_repo_files(invalid_path)

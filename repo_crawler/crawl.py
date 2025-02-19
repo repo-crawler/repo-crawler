@@ -4,6 +4,21 @@ import sys
 import os
 import logging
 from pathlib import Path
+import requests
+
+def verify_branch_exists(org, repo, branch, token=None):
+    """
+    Verifies that the branch exists in the specified GitHub repository
+    by querying the GitHub API. Raises a ValueError if the branch does not exist.
+    """
+    url = f"https://api.github.com/repos/{org}/{repo}/branches/{branch}"
+    headers = {}
+    if token:
+        headers["Authorization"] = f"token {token}"
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        raise ValueError(f"Branch '{branch}' does not exist in repository '{org}/{repo}'.")
+    # If the branch exists, continue.
 
 def crawl_repo_files(github_path, include_exts=None, exclude_exts=None, token=None, username=None, out=None):
     """
@@ -44,10 +59,13 @@ def crawl_repo_files(github_path, include_exts=None, exclude_exts=None, token=No
     ref = parts[2] if len(parts) >= 3 else "main"
     subdir = '/'.join(parts[3:]) if len(parts) > 3 else ""
 
-    # Use fsspec's GitHubFileSystem to access files (works with local or GitHub repos)
+    # Verify that the specified branch actually exists.
+    verify_branch_exists(org, repo, ref, token)
+
+    # Use fsspec's GitHubFileSystem to access files.
     fs = fsspec.filesystem("github", org=org, repo=repo, ref=ref, token=token, username=username)
 
-    # Build the glob pattern for recursive search
+    # Build the glob pattern for recursive search.
     pattern = f"{subdir}/**" if subdir else "**"
     try:
         all_paths = fs.glob(pattern, recursive=True)
@@ -56,6 +74,13 @@ def crawl_repo_files(github_path, include_exts=None, exclude_exts=None, token=No
             f"Failed to access branch '{ref}' in repository '{org}/{repo}'. "
             "Please verify that the branch exists."
         ) from e
+
+    # If no files are found, assume the branch may be empty.
+    if not all_paths:
+        raise ValueError(
+            f"No files found in repository '{org}/{repo}' for branch '{ref}'. "
+            "This may be because the branch does not exist or is empty."
+        )
 
     for path in all_paths:
         try:
@@ -162,7 +187,6 @@ def main():
             for d in reversed(missing_dirs):
                 logging.info(f"Creating directory: {d}")
                 os.mkdir(d)
-
         with open(output_path, "w", encoding="utf-8") as out_file:
             crawl_repo_files(
                 args.github_path,
