@@ -21,7 +21,7 @@ def verify_branch_exists(org, repo, branch, token=None):
         raise ValueError(f"Branch '{branch}' does not exist in repository '{org}/{repo}'.")
     # If the branch exists, continue.
 
-def crawl_repo_files(github_path, include_exts=None, exclude_exts=None, token=None, username=None, out=None):
+def crawl_repo_files(github_path, include_exts=None, exclude_exts=None, token=None, username=None, out=None, include_dir=None):
     """
     Recursively crawls a GitHub repository using fsspec's GithubFileSystem,
     printing each file's content with a header and numbered lines.
@@ -38,6 +38,8 @@ def crawl_repo_files(github_path, include_exts=None, exclude_exts=None, token=No
     :param token: An optional GitHub personal access token.
     :param username: The GitHub username associated with the token. Required if token is provided.
     :param out: A file-like object to write the output to. Defaults to sys.stdout.
+    :param include_dir: If provided (e.g., "src"), the crawl is constrained to that directory
+                        and all of its subdirectories.
     """
     if out is None:
         out = sys.stdout
@@ -58,9 +60,13 @@ def crawl_repo_files(github_path, include_exts=None, exclude_exts=None, token=No
     org = parts[0]
     repo = parts[1]
     ref = parts[2] if len(parts) >= 3 else "main"
+    # Default subdir from the github_path (if provided)
     subdir = '/'.join(parts[3:]) if len(parts) > 3 else ""
+    # Override subdir if --include_dir is specified.
+    if include_dir is not None:
+        subdir = include_dir
 
-    # Verify that the specified branch actually exists.
+    # Verify that the specified branch exists.
     verify_branch_exists(org, repo, ref, token)
 
     fs = GithubFileSystem(org=org, repo=repo, sha=ref, token=token, username=username)
@@ -158,6 +164,13 @@ def main():
               "The path must be an absolute path to a file (not a directory) and include a file extension."),
         default=None
     )
+    # Change: make --include_dir accept a directory name to constrain the crawl.
+    parser.add_argument(
+        "--include_dir",
+        type=str,
+        default=None,
+        help="Constrain the crawl to the specified directory (and its subdirectories), e.g., 'src'."
+    )
 
     args = parser.parse_args()
 
@@ -194,7 +207,8 @@ def main():
                 exclude_exts=args.exclude,
                 token=args.token,
                 username=args.username,
-                out=out_file
+                out=out_file,
+                include_dir=args.include_dir
             )
     else:
         crawl_repo_files(
@@ -202,7 +216,8 @@ def main():
             include_exts=args.include,
             exclude_exts=args.exclude,
             token=args.token,
-            username=args.username
+            username=args.username,
+            include_dir=args.include_dir
         )
 
 if __name__ == "__main__":
