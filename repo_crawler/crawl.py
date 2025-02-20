@@ -63,7 +63,7 @@ def crawl_repo_files(github_path, include_exts=None, exclude_exts=None, token=No
     # Verify that the specified branch actually exists.
     verify_branch_exists(org, repo, ref, token)
 
-    fs = GithubFileSystem(org=org, repo=repo, ref=ref, token=token, username=username)
+    fs = GithubFileSystem(org=org, repo=repo, sha=ref, token=token, username=username)
 
     # Build the glob pattern for recursive search.
     pattern = f"{subdir}/**" if subdir else "**"
