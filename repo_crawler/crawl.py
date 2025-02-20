@@ -1,4 +1,5 @@
 import fsspec
+from fsspec.implementations.github import GithubFileSystem
 import argparse
 import sys
 import os
@@ -62,8 +63,6 @@ def crawl_repo_files(github_path, include_exts=None, exclude_exts=None, token=No
     # Verify that the specified branch actually exists.
     verify_branch_exists(org, repo, ref, token)
 
-    # Use the dedicated GithubFileSystem to ensure the branch is honored.
-    from fsspec.implementations.github import GithubFileSystem
     fs = GithubFileSystem(org=org, repo=repo, ref=ref, token=token, username=username)
 
     # Build the glob pattern for recursive search.
