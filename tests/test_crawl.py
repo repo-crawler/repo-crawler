@@ -52,7 +52,7 @@ def fake_fs_with_files():
 
 # For tests that need a valid branch, we patch verify_branch_exists to do nothing.
 @patch("repo_crawler.crawl.verify_branch_exists", return_value=None)
-@patch("repo_crawler.crawl.fsspec.filesystem")
+@patch("repo_crawler.crawl.GithubFileSystem")
 def test_path_transformation(mock_filesystem, mock_verify, fake_fs_with_files):
     """
     Test that an input in the form "org/name" (without a prefix)
@@ -66,7 +66,7 @@ def test_path_transformation(mock_filesystem, mock_verify, fake_fs_with_files):
     assert fake_fs_with_files.last_glob == expected_pattern
 
 @patch("repo_crawler.crawl.verify_branch_exists", return_value=None)
-@patch("repo_crawler.crawl.fsspec.filesystem")
+@patch("repo_crawler.crawl.GithubFileSystem")
 def test_valid_path_with_exclusion(mock_filesystem, mock_verify, fake_fs_with_files, capsys):
     """
     Test that files with extensions in the exclusion list are skipped.
@@ -82,7 +82,7 @@ def test_valid_path_with_exclusion(mock_filesystem, mock_verify, fake_fs_with_fi
     assert "file3.py" in output
 
 @patch("repo_crawler.crawl.verify_branch_exists", return_value=None)
-@patch("repo_crawler.crawl.fsspec.filesystem")
+@patch("repo_crawler.crawl.GithubFileSystem")
 def test_valid_path_with_inclusion(mock_filesystem, mock_verify, fake_fs_with_files, capsys):
     """
     Test that only files with extensions in the inclusion list are processed.
