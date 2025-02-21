@@ -50,6 +50,52 @@ def fake_fs_with_files():
     }
     return FakeFS(files)
 
+@patch("repo_crawler.crawl.verify_branch_exists", return_value=None)
+@patch("repo_crawler.crawl.GithubFileSystem")
+def test_include_dir_filtering(mock_filesystem, mock_verify):
+    """
+    Test that the --include_dir flag correctly limits the crawl to the specified directory.
+    """
+    # Set up a fake file system with files in different directories.
+    files = {
+        "github://user/repo/branch/file1.txt": ("outside", {'type': 'file'}),
+        "github://user/repo/branch/src/file2.txt": ("inside", {'type': 'file'}),
+        "github://user/repo/branch/src/sub/file3.txt": ("inside sub", {'type': 'file'}),
+        "github://user/repo/branch/dir/file4.txt": ("outside dir", {'type': 'file'}),
+    }
+    fake_fs = FakeFS(files)
+
+    # Override glob to simulate filtering by the include_dir.
+    def filtered_glob(pattern, recursive):
+        fake_fs.last_glob = pattern
+        # Assuming the pattern is like "src/**", we extract "src" and return only paths under that directory.
+        subdir = pattern[:-3]  # remove '/**'
+        filtered = []
+        for k in fake_fs.files.keys():
+            # The path format is "github://user/repo/branch/<subdir>/..."
+            parts = k.split("/")
+            if len(parts) > 5 and parts[5] == subdir:
+                filtered.append(k)
+        return filtered
+
+    fake_fs.glob = filtered_glob
+    mock_filesystem.return_value = fake_fs
+
+    # Run the crawl with include_dir set to "src"
+    output_io = io.StringIO()
+    crawl_repo_files("github://user/repo/branch", include_dir="src", out=output_io)
+
+    # Verify that the glob pattern was constructed as expected.
+    assert fake_fs.last_glob == "src/**"
+
+    output = output_io.getvalue()
+    # Check that only files under the "src" directory are processed.
+    assert "# github://user/repo/branch/src/file2.txt" in output
+    assert "# github://user/repo/branch/src/sub/file3.txt" in output
+    # Files outside the "src" directory should not appear.
+    assert "file1.txt" not in output
+    assert "dir/file4.txt" not in output
+
 # For tests that need a valid branch, we patch verify_branch_exists to do nothing.
 @patch("repo_crawler.crawl.verify_branch_exists", return_value=None)
 @patch("repo_crawler.crawl.GithubFileSystem")
