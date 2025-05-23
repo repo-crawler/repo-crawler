@@ -28,7 +28,10 @@ def crawl_repo_files(github_path, include_exts=None, exclude_exts=None, token=No
 
     The github_path can be provided in one of the following formats:
       1. github://<org>/<repo>/<branch>[/optional/path]
+         Note: For this format, branch names with forward slashes are not supported
+         due to parsing ambiguity. Use format 2 for such branches.
       2. <org>/<repo>:<branch> or <org>/<repo> (branch defaults to "main" if omitted)
+         This format supports branch names with forward slashes like "feature/branch-name"
 
     :param github_path: The GitHub repository path.
     :param include_exts: A list of file extensions to include (e.g., ['py', 'txt']).
@@ -46,22 +49,35 @@ def crawl_repo_files(github_path, include_exts=None, exclude_exts=None, token=No
 
     # Parse the input path (supports various formats)
     if github_path.startswith("github://"):
+        # Format: github://org/repo/branch[/optional/path]
+        # Note: branch names with forward slashes are not supported in this format
         path_without_prefix = github_path[len("github://"):]
+        parts = path_without_prefix.split('/')
+        if len(parts) < 2:
+            raise ValueError("Invalid GitHub path: must include at least org and repo.")
+        org = parts[0]
+        repo = parts[1]
+        ref = parts[2] if len(parts) >= 3 else "main"
+        # Default subdir from the github_path (if provided)
+        subdir = '/'.join(parts[3:]) if len(parts) > 3 else ""
     else:
+        # Format: org/repo:branch or org/repo (defaults to main)
+        # This format supports branch names with forward slashes
         if ':' in github_path:
-            repo_part, branch = github_path.split(":", 1)
+            repo_part, ref = github_path.split(":", 1)
         else:
-            repo_part, branch = github_path, "main"
-        path_without_prefix = f"{repo_part}/{branch}"
+            repo_part = github_path
+            ref = "main"
+        
+        # Parse org/repo part
+        repo_parts = repo_part.split('/')
+        if len(repo_parts) != 2:
+            raise ValueError("Invalid GitHub path: must be in format 'org/repo' or 'org/repo:branch'.")
+        org, repo = repo_parts
+        
+        # No subdir component in colon syntax
+        subdir = ""
 
-    parts = path_without_prefix.split('/')
-    if len(parts) < 2:
-        raise ValueError("Invalid GitHub path: must include at least org and repo.")
-    org = parts[0]
-    repo = parts[1]
-    ref = parts[2] if len(parts) >= 3 else "main"
-    # Default subdir from the github_path (if provided)
-    subdir = '/'.join(parts[3:]) if len(parts) > 3 else ""
     # Override subdir if --include_dir is specified.
     if include_dir is not None:
         subdir = include_dir
@@ -132,7 +148,9 @@ def main():
         "github_path",
         help=("The GitHub repository path to crawl. "
               "Examples: 'org/repo:branch' or 'org/repo' (defaults to branch 'main') "
-              "or the full 'github://org/repo/branch[/optional/path]' format.")
+              "or the full 'github://org/repo/branch[/optional/path]' format. "
+              "For branch names with forward slashes (e.g., 'feature/branch-name'), "
+              "use the colon syntax: 'org/repo:feature/branch-name'.")
     )
     # Create a mutually exclusive group for include and exclude flags.
     group = parser.add_mutually_exclusive_group()
